@@ -1,13 +1,14 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 from __future__ import print_function, \
     unicode_literals
 
+import sys
 import urllib
 import urllib2
 import base64
 import json
-from pprint import pprint
+# from pprint import pprint
 
 try:
     input = raw_input
@@ -19,22 +20,32 @@ except:
 ############################################################
 
 # use a viewer key
-src = dict(
-    dashboards={"node": 'node.json',
-                "pd"  : 'pd.json',
-                "tidb": 'tidb.json',
-                "tikv": 'tikv.json',
-                "overview": 'overview.json',
-                "disk_performance": 'DiskPerformance.json',
-                "blackbox_exporter": "blackbox_exporter.json"})
-
 dests = [
 ]
 
 if not dests:
-    with open("./dests.json") as fp:
+    with open(sys.argv[1]) as fp:
         dests = json.load(fp)
 
+src = dict(
+    dashboards={"node": 'node.json',
+                "pd"  : 'pd.json',
+                "tidb": 'tidb.json',
+                "tidb_summary": 'tidb_summary.json',
+                "tikv_summary": 'tikv_summary.json',
+                "tikv_details": 'tikv_details.json',
+                "tikv_trouble_shot": 'tikv_trouble_shooting.json',
+                "tiflash_summary": 'tiflash_summary.json',
+                "tiflash_proxy_summary": 'tiflash_proxy_summary.json',
+                "binlog": "binlog.json",
+                "overview": 'overview.json',
+                "disk_performance": 'disk_performance.json',
+                "blackbox_exporter": 'blackbox_exporter.json',
+                "kafka_overview": 'kafka.json',
+                "lightning": 'lightning.json',
+                "br": "br.json",
+                "performance_read": 'performance_read.json',
+                "performance_write": 'performance_write.json'})
 
 ############################################################
 ################## CONFIGURATION ENDS ######################
@@ -52,10 +63,17 @@ def export_dashboard(api_url, api_key, dashboard_name):
 def fill_dashboard_with_dest_config(dashboard, dest, type_='node'):
     dashboard['title'] = dest['titles'][type_]
     dashboard['id'] = None
-#    pprint(dashboard)
-    for row in dashboard['rows']:
-        for panel in row['panels']:
-            panel['datasource'] = dest['datasource']
+    # pprint(dashboard)
+    if 'rows' in dashboard:
+        panels = dashboard['rows']
+    else:
+        panels = dashboard['panels']
+    for row in panels:
+        if 'panels' in row:
+            for panel in row['panels']:
+                panel['datasource'] = dest['datasource']
+        else:
+            row['datasource'] = dest['datasource']
 
     if 'templating' in dashboard:
         for templating in dashboard['templating']['list']:
@@ -67,6 +85,17 @@ def fill_dashboard_with_dest_config(dashboard, dest, type_='node'):
     if 'annotations' in dashboard:
         for annotation in dashboard['annotations']['list']:
             annotation['datasource'] = dest['datasource']
+
+    if 'links' in dashboard:
+        for link in dashboard['links']:
+            if 'title' in link and link['title'] == 'Report':
+                link['icon'] = "doc"
+                link['includeVars'] = True
+                link['keepTime'] = True
+                link['targetBlank'] = True
+                link['tooltip'] = "Open a pdf report for the current dashboard"
+                link['type'] = "link"
+
     return dashboard
 
 def import_dashboard(api_url, api_key, dashboard):
@@ -98,10 +127,8 @@ def import_dashboard_via_user_pass(api_url, user, password, dashboard):
         resp = urllib2.urlopen(req)
         data = json.load(resp)
         return data
-    except urllib2.HTTPError, error:
-        data = json.load(error)
-        return data
-
+    except urllib2.URLError, error:
+        return error.reason
 
 if __name__ == '__main__':
     for type_ in src['dashboards']:
@@ -112,14 +139,19 @@ if __name__ == '__main__':
 
         for dest in dests:
             dashboard = fill_dashboard_with_dest_config(dashboard, dest, type_)
-            print("[import] as <{}> to [{}]".format(
+            print("[import] <{}> to [{}]".format(
                 dashboard['title'], dest['name']), end='\t............. ')
             if 'user' in dest:
                 ret = import_dashboard_via_user_pass(dest['url'], dest['user'], dest['password'], dashboard)
             else:
                 ret = import_dashboard(dest['url'], dest['key'], dashboard)
-            print(ret['status'])
 
-            if ret['status'] != 'success':
-                print('  > ERROR: ', ret)
+            if isinstance(ret,dict):
+                if ret['status'] != 'success':
+                    print('ERROR: ', ret)
+                    raise RuntimeError
+                else:
+                    print(ret['status'])
+            else:
+                print('ERROR: ', ret)
                 raise RuntimeError

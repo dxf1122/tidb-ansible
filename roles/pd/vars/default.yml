@@ -20,21 +20,9 @@ global:
   tso-save-interval: "3s"
 
 security:
-  # Path of file that contains list of trusted SSL CAs. if set, following four settings shouldn't be empty
-  cacert-path: ""
-  # Path of file that contains X509 certificate in PEM format.
-  cert-path: ""
-  # Path of file that contains X509 key in PEM format.
-  key-path: ""
 
 log:
   level: "info"
-
-  # log format, one of json, text, console
-  #format: "text"
-
-  # disable automatic timestamps in output
-  #disable-timestamp: false
 
   # file logging
   file:
@@ -49,19 +37,17 @@ log:
     #log-rotate: true
 
 metric:
-  # prometheus client push interval, set "0s" to disable prometheus.
-  interval: "15s"
-  # prometheus pushgateway address, leaves it empty will disable prometheus.
-  address: ""
 
 schedule:
+  split-merge-interval: "1h"
   max-snapshot-count: 3
   max-pending-peer-count: 16
-  max-store-down-time: "1h"
-  leader-schedule-limit: 64
-  region-schedule-limit: 16
-  replica-schedule-limit: 24
-  tolerant-size-ratio: 2.5
+  max-store-down-time: "30m"
+  leader-schedule-limit: 4
+  region-schedule-limit: 64
+  replica-schedule-limit: 64
+  merge-schedule-limit: 8
+  enable-one-way-merge: false
 
 replication:
   # The number of replicas for each region.

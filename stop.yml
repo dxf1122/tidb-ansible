@@ -30,77 +30,153 @@
   roles:
     - check_config_dynamic
 
+
 - hosts: monitored_servers
   tags:
     - node_exporter
-    - blackbox_exporter
   tasks:
-    - name: stop node_exporter/blackbox_exporter by supervise
+    - name: stop node_exporter by supervise
       shell: cd {{ deploy_dir }}/scripts && ./stop_{{ item }}.sh
       with_items:
         - node_exporter
+      when: process_supervision == 'supervise'
+
+    - name: stop node_exporter by systemd
+      systemd: name={{ item }} state=stopped
+      become: true
+      when: process_supervision == 'systemd'
+      with_items:
+        - node_exporter-{{ node_exporter_port }}.service
+
+    - name: wait until the node_exporter port is down
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ node_exporter_port }}"
+        state: stopped
+        msg: "the node_exporter port {{ node_exporter_port }} is not down"
+
+
+- hosts: monitored_servers
+  tags:
+    - blackbox_exporter
+  tasks:
+    - name: stop blackbox_exporter by supervise
+      shell: cd {{ deploy_dir }}/scripts && ./stop_{{ item }}.sh
+      with_items:
         - blackbox_exporter
       when: process_supervision == 'supervise'
 
     - name: stop node_exporter/blackbox_exporter by systemd
       systemd: name={{ item }} state=stopped
       become: true
-      when: process_supervision == 'systemd' and ansible_user != "root"
+      when: process_supervision == 'systemd'
       with_items:
-        - node_exporter.service
-        - blackbox_exporter.service
+        - blackbox_exporter-{{ blackbox_exporter_port }}.service
 
-    - name: stop node_exporter/blackbox_exporter by systemd
-      systemd: name={{ item }} state=stopped
-      when: process_supervision == 'systemd' and ansible_user == "root"
-      with_items:
-        - node_exporter.service
-        - blackbox_exporter.service
-      vars:
-        - ansible_become: false
-        - ansible_become_user: root
+    - name: wait until the blackbox_exporter port is down
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ blackbox_exporter_port }}"
+        state: stopped
+        msg: "the blackbox_exporter port {{ blackbox_exporter_port }} is not down"
 
-    - name: wait node_exporter down
-      wait_for: host={{ ansible_host }} port={{ node_exporter_port }} state=stopped
 
-    - name: wait blackbox_exporter down
-      wait_for: host={{ ansible_host }} port={{ blackbox_exporter_port }} state=stopped
+- hosts: alertmanager_servers
+  tags:
+    - alertmanager
+  tasks:
+    - name: stop alertmanager by supervise
+      shell: cd {{ deploy_dir }}/scripts && ./stop_alertmanager.sh
+      when: process_supervision == 'supervise'
+
+    - name: stop alertmanager by systemd
+      systemd: name=alertmanager-{{ alertmanager_port }}.service state=stopped
+      become: true
+      when: process_supervision == 'systemd'
+
+    - name: wait until the alertmanager port is down
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ alertmanager_port }}"
+        state: stopped
+        msg: "the alertmanager port {{ alertmanager_port }} is not down"
+
 
 - hosts: monitoring_servers
   tags:
     - pushgateway
-    - prometheus
   tasks:
-    - name: stop monitoring modules by supervise
+    - name: stop pushgateway by supervise
       shell: cd {{ deploy_dir }}/scripts && ./stop_{{ item }}.sh
       with_items:
         - pushgateway
+      when: process_supervision == 'supervise'
+
+    - name: stop pushgateway by systemd
+      systemd: name={{ item }} state=stopped
+      when: process_supervision == 'systemd'
+      become: true
+      with_items:
+        - pushgateway-{{ pushgateway_port }}.service
+
+    - name: wait until the pushgateway port is down
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ pushgateway_port }}"
+        state: stopped
+        msg: "the pushgateway port {{ pushgateway_port }} is not down"
+
+
+- hosts: monitoring_servers
+  tags:
+    - prometheus
+  tasks:
+    - name: stop prometheus by supervise
+      shell: cd {{ deploy_dir }}/scripts && ./stop_{{ item }}.sh
+      with_items:
         - prometheus
       when: process_supervision == 'supervise'
 
-    - name: stop monitoring modules by systemd
+    - name: stop prometheus by systemd
       systemd: name={{ item }} state=stopped
-      when: process_supervision == 'systemd' and ansible_user != "root"
+      when: process_supervision == 'systemd'
       become: true
       with_items:
-        - pushgateway.service
-        - prometheus.service
+        - prometheus-{{ prometheus_port }}.service
 
-    - name: stop monitoring modules by systemd
-      systemd: name={{ item }} state=stopped
-      when: process_supervision == 'systemd' and ansible_user == "root"
-      with_items:
-        - pushgateway.service
-        - prometheus.service
-      vars:
-        - ansible_become: false
-        - ansible_become_user: root
+    - name: wait until the prometheus port is down
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ prometheus_port }}"
+        state: stopped
+        msg: "the prometheus port {{ prometheus_port }} is not down"
 
-    - name: wait pushgateway down
-      wait_for: host={{ ansible_host }} port={{ pushgateway_port }} state=stopped
 
-    - name: wait prometheus down
-      wait_for: host={{ ansible_host }} port={{ prometheus_port }} state=stopped
+- hosts: kafka_exporter_servers
+  tags:
+    - kafka_exporter
+  tasks:
+    - name: stop kafka_exporter by supervise
+      shell: cd {{ deploy_dir }}/scripts && ./stop_kafka_exporter.sh
+      when:
+        - enable_binlog|default(false)
+        - process_supervision == 'supervise'
+
+    - name: stop kafka_exporter by systemd
+      become: true
+      systemd: name=kafka_exporter-{{ kafka_exporter_port }}.service state=stopped enabled=no
+      when:
+        - enable_binlog|default(false)
+        - process_supervision == 'systemd'
+
+    - name: wait until the kafka_exporter port is down
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ kafka_exporter_port }}"
+        state: stopped
+        msg: "the kafka_exporter port {{ kafka_exporter_port }} is not down"
+      when: enable_binlog|default(false)
+
 
 - hosts: tidb_servers
   tags:
@@ -115,40 +191,64 @@
     - name: stop TiDB by systemd
       systemd: name=tidb-{{ tidb_port }}.service state=stopped
       become: true
-      when: process_supervision == 'systemd' and ansible_user != "root"
+      when: process_supervision == 'systemd'
 
-    - name: stop TiDB by systemd
-      systemd: name=tidb-{{ tidb_port }}.service state=stopped
-      when: process_supervision == 'systemd' and ansible_user == "root"
-      vars:
-        - ansible_become: false
-        - ansible_become_user: root
+    - name: wait until the TiDB port is down
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ tidb_port }}"
+        state: stopped
+        msg: "the TiDB port {{ tidb_port }} is not down"
 
-    - name: wait TiDB down
-      wait_for: host={{ ansible_host }} port={{ tidb_port }} state=stopped
 
+- hosts: pump_servers
+  tags:
+    - pump
+  tasks:
     - name: stop pump by supervise
       shell: cd {{ deploy_dir }}/scripts && ./stop_{{ item }}.sh
-      when: enable_binlog and process_supervision == 'supervise'
+      when:
+        - enable_binlog|default(false)
+        - process_supervision == 'supervise'
       with_items:
         - pump
 
     - name: stop pump by systemd
-      systemd: name=pump.service state=stopped
+      systemd: name=pump-{{ pump_port }}.service state=stopped
       become: true
-      when: enable_binlog and process_supervision == 'systemd' and ansible_user != "root"
+      when:
+        - enable_binlog|default(false)
+        - process_supervision == 'systemd'
 
-    - name: stop pump by systemd
-      systemd: name=pump.service state=stopped
-      when: enable_binlog and process_supervision == 'systemd' and ansible_user == "root"
-      vars:
-        - ansible_become: false
-        - ansible_become_user: root
+    - name: wait until the pump port is down
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ pump_port }}"
+        state: stopped
+        msg: "the pump port {{ pump_port }} is not down"
+      when: enable_binlog|default(false)
 
-    - name: wait pump down
-      wait_for: |
-        host={{ ansible_host }} port={{ pump_port }} state=stopped
-      when: enable_binlog
+- hosts: tiflash_servers
+  tags:
+    - tiflash
+  tasks:
+    - name: stop TiFlash by supervise
+      shell: cd {{ deploy_dir }}/scripts && ./stop_{{ item }}.sh
+      when: process_supervision == 'supervise'
+      with_items:
+        - tiflash
+
+    - name: stop TiFlash by systemd
+      systemd: name=tiflash-{{ tcp_port }}.service state=stopped
+      become: true
+      when: process_supervision == 'systemd'
+
+    - name: wait until the TiFlash port is down
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ http_port }}"
+        state: stopped
+        msg: "the TiFlash port {{ http_port }} is not down"
 
 - hosts: tikv_servers
   tags:
@@ -163,28 +263,24 @@
     - name: stop TiKV by systemd
       systemd: name=tikv-{{ tikv_port }}.service state=stopped
       become: true
-      when: process_supervision == 'systemd' and ansible_user != "root"
+      when: process_supervision == 'systemd'
 
-    - name: stop TiKV by systemd
-      systemd: name=tikv-{{ tikv_port }}.service state=stopped
-      when: process_supervision == 'systemd' and ansible_user == "root"
-      vars:
-        - ansible_become: false
-        - ansible_become_user: root
-
-    - name: wait TiKV down (via Port)
-      wait_for: host={{ ansible_host }} port={{ tikv_port }} state=stopped
-
-    - name: wait TiKV down (via PID)
-      wait_for_pid: pid_file={{ deploy_dir }}/status/tikv.pid timeout=300 state=absent
+    - name: wait until the TiKV port is down
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ tikv_port }}"
+        state: stopped
+        msg: "the TiKV port {{ tikv_port }} is not down"
 
     - command: cat {{ deploy_dir }}/status/tikv.pid
       register: old_tikv_pid
       ignore_errors: yes
+      changed_when: false
 
     - name: display old tikv pid
       debug:
         msg: "tikv binary or docker pid: {{ old_tikv_pid.stdout }}"
+
 
 - hosts: pd_servers
   tags:
@@ -197,41 +293,36 @@
         - pd
 
     - name: stop PD by systemd
-      systemd: name=pd.service state=stopped
+      systemd: name=pd-{{ pd_client_port }}.service state=stopped
       become: true
-      when: process_supervision == 'systemd' and ansible_user != "root"
+      when: process_supervision == 'systemd'
 
-    - name: stop PD by systemd
-      systemd: name=pd.service state=stopped
-      when: process_supervision == 'systemd' and ansible_user == "root"
-      vars:
-        - ansible_become: false
-        - ansible_become_user: root
+    - name: wait until the PD port is down
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ pd_client_port }}"
+        state: stopped
+        msg: "the PD port {{ pd_client_port }} is not down"
 
-    - name: wait PD down
-      wait_for: host={{ ansible_host }} port={{ pd_client_port }} state=stopped
 
 - hosts: grafana_servers
   tags:
     - grafana
   tasks:
-    - name: stop monitoring modules by supervise
+    - name: stop grafana by supervise
       shell: cd {{ deploy_dir }}/scripts && ./stop_{{ item }}.sh
       when: process_supervision == 'supervise'
       with_items:
         - grafana
 
-    - name: stop monitoring modules by systemd
-      systemd: name=grafana.service state=stopped
+    - name: stop grafana by systemd
+      systemd: name=grafana-{{ grafana_port }}.service state=stopped
       become: true
-      when: process_supervision == 'systemd' and ansible_user != "root"
+      when: process_supervision == 'systemd'
 
-    - name: stop monitoring modules by systemd
-      systemd: name=grafana.service state=stopped
-      when: process_supervision == 'systemd' and ansible_user == "root"
-      vars:
-        - ansible_become: false
-        - ansible_become_user: root
-
-    - name: wait grafana down
-      wait_for: host={{ ansible_host }} port={{ grafana_port }} state=stopped
+    - name: wait until the grafana port is down
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ grafana_port }}"
+        state: stopped
+        msg: "the grafana port {{ grafana_port }} is not down"

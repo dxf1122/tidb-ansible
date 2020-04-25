@@ -1,43 +1,27 @@
 ---
 
 - name: disk space check - fail when disk is full
-  raw: df -h . | tail -n1
+  shell: df -h . | tail -n1
   register: disk_space_st
   failed_when: " '100%' in disk_space_st.stdout "
   changed_when: false
-  vars:
-    ansible_become: false
-
-# - name: Get os_version from /etc/os-release
-#   raw: "([ -f /etc/os-release ] && grep '^VERSION_ID=' /etc/os-release | sed s'/VERSION_ID=//' | tr -d \\\") || ([ -f /etc/redhat-release ] && cat /etc/redhat-release | cut '-d ' -f4 | cut '-d.' -f1)"
-#   register: os_version_st
-#   vars:
-#     ansible_become: false
-#
-# - name: set os_version facts
-#   set_fact:
-#     os_version: "{{ os_version_st.stdout | trim }}"
 
 # Debian GNU/Linux, Ubuntu, Fedora, CentOS, CoreOS
 - name: Get distro name from /etc/os-release
-  raw: "([ -f /etc/os-release ] && grep '^NAME=' /etc/os-release | sed s'/NAME=//' | tr -d \\\") || ([ -f /etc/redhat-release ] && cat /etc/redhat-release | cut '-d ' -f1)"
+  shell: "([ -f /etc/os-release ] && grep '^NAME=' /etc/os-release | sed s'/NAME=//' | tr -d \\\") || ([ -f /etc/redhat-release ] && cat /etc/redhat-release | cut '-d ' -f1)"
   register: distro_st
   failed_when: false
   changed_when: false
-  vars:
-    ansible_become: false
 
 - name: set distro facts
   set_fact:
     distro: "{{ distro_st.stdout | trim }}"
 
 - name: python check
-  raw: python --version
+  shell: python --version
   register: py_st
   failed_when: false
   changed_when: false
-  vars:
-    ansible_become: false
 
 - name: set has_python facts
   set_fact:
@@ -48,32 +32,8 @@
     has_python: false
   when: "'command not found' in py_st.stdout"
 
-- include: coreos.yml
-  static: no
-  when:
-    - "'CoreOS' in distro and not has_python"
-    - ansible_user == 'root'
-  vars:
-    - ansible_become: false
+- include_tasks: coreos.yml
+  when: "'CoreOS' in distro and not has_python"
 
-- include: coreos.yml
-  static: no
-  become: true
-  when:
-    - "'CoreOS' in distro and not has_python"
-    - ansible_user != 'root'
-
-- include: root_tasks.yml
-  static: no
-  when:
-    - "'CoreOS' not in distro"
-    - ansible_user == 'root'
-  vars:
-    - ansible_become: false
-
-- include: root_tasks.yml
-  static: no
-  become: true
-  when:
-    - "'CoreOS' not in distro"
-    - ansible_user != 'root'
+- include_tasks: root_tasks.yml
+  when: "'CoreOS' not in distro"

@@ -6,48 +6,17 @@ Ansible is an IT automation tool. It can configure systems, deploy software, and
  
 You can use the TiDB-Ansible configuration file to set up the cluster topology, completing all operation tasks with one click, including:
 	
-- Initializing the system, including creating user for deployment, setting up hostname, etc.
+- Initializing the system, including creating the user for deployment, setting up the hostname, etc.
 - Deploying the components
-- Rolling upgrade, including module survival detection
+- Rolling update, including module survival detection
 - Cleaning data
-- Cleaning environment
+- Cleaning the environment
 - Configuring monitoring modules
 
 ## Tutorial
-[English](https://github.com/pingcap/docs/blob/master/op-guide/ansible-deployment.md)
-[简体中文](https://github.com/pingcap/docs-cn/blob/master/op-guide/ansible-deployment.md)
 
-## Where to get binary
-
-- http://download.pingcap.org/tidb-latest-linux-amd64-unportable.tar.gz
-- http://download.pingcap.org/tidb-latest-linux-amd64-unportable-centos6.tar.gz
-- http://download.pingcap.org/tidb-binlog-latest-linux-amd64.tar.gz
-- http://download.pingcap.org/tidb-tools-latest-linux-amd64.tar.gz
-- http://download.pingcap.org/sysbench-static-linux-amd64.tar.gz
-- http://download.pingcap.org/mydumper-linux-amd64.tar.gz
-- http://download.pingcap.org/opbin.tar.gz
-
-Above binaries will be automatically downloaded by:
-
-    ansible-playbook local_prepare.yml
-
-## Common Tasks
-
-```
-ansible all -m user -a 'name=tidb shell=/bin/bash groups=wheel append=yes'
-
-ansible-playbook deploy.yml --list-hosts
-
-ansible-playbook deploy.yml -k -K
-
-ansible-playbook rolling_update.yml -k
-```
-
-## Special Tasks
-
-Rolling update TiKV only:
-
-    ansible-playbook rolling_update.yml --tags tikv
+- [English](https://pingcap.com/docs/dev/how-to/deploy/orchestrated/ansible/)
+- [简体中文](https://pingcap.com/docs-cn/op-guide/ansible-deployment/)
 
 ## License
 TiDB-Ansible is under the Apache 2.0 license. 
